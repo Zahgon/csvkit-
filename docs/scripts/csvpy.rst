@@ -5,7 +5,7 @@ csvpy
 Description
 ===========
 
-Loads a CSV file into a :class:`agate.csv.Reader` object and then drops into a Python shell so the user can inspect the data however they see fit:
+Loads a CSV file into a :class:`agate.csv.Reader` object and then drops into an interactive Node.js shell so the user can inspect the data however they see fit:
 
 .. code-block:: none
 
@@ -36,7 +36,8 @@ Loads a CSV file into a :class:`agate.csv.Reader` object and then drops into a P
                            --datetime-format, --no-leading-zeroes) when parsing
                            the input.
 
-This tool will automatically use the IPython shell if it is installed, otherwise it will use the running Python shell.
+The shell is the Node.js REPL. ``reader`` holds the rows as arrays of strings; ``table`` (with ``--agate``) has
+``columnNames`` and ``rows``.
 
 .. note::
 
@@ -51,27 +52,16 @@ Basic use:
 
 .. code-block:: console
 
-$ csvpy examples/dummy.csv
-   Welcome! "examples/dummy.csv" has been loaded in a reader object named "reader".
-   >>> next(reader)
-   ['a', 'b', 'c']
-
-As a dictionary:
-
-.. code-block:: console
-
-   $ csvpy --dict examples/dummy.csv
-   Welcome! "examples/dummy.csv" has been loaded in a DictReader object named "reader".
-   >>> next(reader)
-   {'a': '1', 'c': '3', 'b': '2'}
+   $ csvpy examples/dummy.csv
+   Welcome! "examples/dummy.csv" has been loaded in an agate.csv.reader object named "reader".
+   >>> reader[0]
+   [ 'a', 'b', 'c' ]
 
 As an agate table:
 
 .. code-block:: console
 
    $ csvpy --agate examples/dummy.csv
-   Welcome! "examples/dummy.csv" has been loaded in a from_csv object named "reader".
-   >>> reader.print_table()
-   |    a | b | c |
-   | ---- | - | - |
-   | True | 2 | 3 |
+   Welcome! "examples/dummy.csv" has been loaded in an agate.Table object named "table".
+   >>> table.columnNames
+   [ 'a', 'b', 'c' ]

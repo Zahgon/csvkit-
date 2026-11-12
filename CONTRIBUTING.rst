@@ -15,7 +15,7 @@ Report a bug
   * the input file (rename the :code:`.csv` to :code:`.txt` for GitHub)
   * the output text (including the traceback)
   * the csvkit version (:code:`csvcut --version`)
-  * the Python version (:code:`python --version`)
+  * the Node.js version (:code:`node --version`)
   * the operating system and version
 
 Thanks!

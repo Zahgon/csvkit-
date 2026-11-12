@@ -14,9 +14,8 @@ Release process
 
 #. The version number is correct in:
 
-   -  setup.py
+   -  package.json
    -  docs/conf.py
-   -  csvkit/cli.py
 
 #. Regenerate the man pages:
 

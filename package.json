@@ -1,0 +1,55 @@
+{
+  "name": "csvkit",
+  "version": "2.2.0",
+  "description": "A suite of command-line tools for converting to and working with CSV, the king of tabular file formats.",
+  "license": "MIT",
+  "homepage": "https://csvkit.readthedocs.io/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wireservice/csvkit.git"
+  },
+  "type": "commonjs",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "csvclean": "bin/csvclean.js",
+    "csvcut": "bin/csvcut.js",
+    "csvformat": "bin/csvformat.js",
+    "csvgrep": "bin/csvgrep.js",
+    "csvjoin": "bin/csvjoin.js",
+    "csvjson": "bin/csvjson.js",
+    "csvlook": "bin/csvlook.js",
+    "csvpy": "bin/csvpy.js",
+    "csvsort": "bin/csvsort.js",
+    "csvsql": "bin/csvsql.js",
+    "csvstack": "bin/csvstack.js",
+    "csvstat": "bin/csvstat.js",
+    "in2csv": "bin/in2csv.js",
+    "sql2csv": "bin/sql2csv.js"
+  },
+  "man": [
+    "man/csvclean.1",
+    "man/csvcut.1",
+    "man/csvformat.1",
+    "man/csvgrep.1",
+    "man/csvjoin.1",
+    "man/csvjson.1",
+    "man/csvlook.1",
+    "man/csvpy.1",
+    "man/csvsort.1",
+    "man/csvsql.1",
+    "man/csvstack.1",
+    "man/csvstat.1",
+    "man/in2csv.1",
+    "man/sql2csv.1"
+  ],
+  "files": [
+    "bin/",
+    "lib/",
+    "man/"
+  ],
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\""
+  }
+}

@@ -1,7 +1,9 @@
-FROM python:alpine
+FROM node:22-alpine
 
-COPY csvkit csvkit
+WORKDIR /opt/csvkit
+COPY package.json README.rst ./
+COPY bin bin
+COPY lib lib
 COPY man man
-COPY README.rst setup.py .
 
-RUN pip install --no-cache-dir .
+RUN npm install --global .

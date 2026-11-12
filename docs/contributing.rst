@@ -15,7 +15,10 @@ Getting started
 
    git clone git://github.com/wireservice/csvkit.git
    cd csvkit
-   pip install -e .[test]
+   npm test
+
+csvkit needs Node.js 22 or later and uses only Node.js built-in modules, so there is nothing else to install. Run
+``npm link`` to put the development copies of the tools on your ``PATH``.
 
 Principles of development
 =========================
@@ -44,7 +47,7 @@ How to contribute
 #. Fork the project on `GitHub <https://github.com/wireservice/csvkit>`_.
 #. Look through the `open issues <https://github.com/wireservice/csvkit/issues>`_ for a task that you can realistically expect to complete in a few days. Don't worry about the issue's priority; instead, choose something you'll enjoy. You're more likely to finish something if you enjoy hacking on it.
 #. Comment on the issue to let people know you're going to work on it so that no one duplicates your effort. It's good practice to provide a general idea of how you plan to resolve the issue so that others can make suggestions.
-#. Write tests for any changes to the code's behavior. Follow the format of the tests in the ``tests/`` directory to see how this works. You can run tests with the command ``pytest``.
+#. Write tests for any changes to the code's behavior. Follow the format of the tests in the ``test/`` directory to see how this works. You can run tests with the command ``npm test``.
 #. Write the code. Try to be consistent with the style and organization of the existing code. A good contribution won't be refused for stylistic reasons, but large parts of it may be rewritten and nobody wants that.
 #. As you're working, periodically merge in changes from the upstream master branch to avoid having to resolve large merge conflicts. Check that you haven't broken anything by running the tests.
 #. Write documentation for any user-facing features.
@@ -57,7 +60,7 @@ A note on new tools
 
 As a general rule, csvkit is no longer adding new tools. This is the result of limited maintenance time as well as a desire to keep the toolkit focused on the most common use cases. Exceptions may be made to this rule on a case-by-case basis. We, of course, welcome patches to improve existing tools or add useful features.
 
-If you decide to build your own tool, we encourage you to create and maintain it as a separate Python package. You will probably want to use the `agate <https://agate.readthedocs.io/>`_ library, which csvkit uses for most of its CSV reading and writing. Doing so will safe time and make it easier to maintain common behavior with csvkit’s core tools.
+If you decide to build your own tool, we encourage you to create and maintain it as a separate package. You will probably want to reuse csvkit's ``lib/`` modules, which do its CSV reading, type inference and writing. Doing so will save time and make it easier to maintain common behavior with csvkit’s core tools.
 
 Streaming versus buffering
 ==========================

@@ -62,41 +62,17 @@ Troubleshooting
 Installation
 ------------
 
-csvkit is supported on non-end-of-life versions of Python on Linux, macOS and Windows.
+csvkit needs Node.js 22 or later on Linux, macOS or Windows. Check the version with :code:`node --version`.
 
-If installing on macOS, you may need to install Homebrew first:
-
-.. code-block:: bash
-
-   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-   brew install python
-   pip install csvkit
-
-If installing on Ubuntu, you may need to install Python's development headers first:
+If :code:`npm install --global .` fails with ``EACCES: permission denied``, npm's global folder belongs to another
+user. Either point npm at a folder you own:
 
 .. code-block:: bash
 
-   sudo apt-get install python-dev python-pip python-setuptools build-essential
-   pip install csvkit
+   npm config set prefix ~/.local
+   npm install --global .
 
-If the installation is successful but csvkit's tools fail, you may need to update Python's setuptools package first:
-
-.. code-block:: bash
-
-   pip install --upgrade setuptools
-   pip install --upgrade csvkit
-
-On macOS, if you see ``OSError: [Errno 1] Operation not permitted``, try:
-
-.. code-block:: bash
-
-   sudo pip install --ignore-installed csvkit
-
-Or if you see ``/usr/local/bin/pip: bad interpreter`` and have Python 3 installed, try:
-
-.. code-block:: bash
-
-   python3 -m pip install csvkit
+or run the tools in place, for example :code:`node bin/csvlook.js dummy.csv`.
 
 CSV formatting and parsing
 --------------------------
@@ -135,7 +111,7 @@ If a tool is too slow to be practical for your data try setting the :code:`--sni
 Database errors
 ---------------
 
-Are you seeing this error message, even after running :code:`pip install psycopg2`, :code:`pip install mysql-connector-python` or :code:`pip install mysqlclient`?
+Are you seeing this error message?
 
 .. code-block:: none
 
@@ -148,27 +124,21 @@ Are you seeing this error message, even after running :code:`pip install psycopg
 
     https://www.sqlalchemy.org/docs/dialects/
 
-If you installed csvkit with Homebrew (``brew install csvkit``), then you need to install those packages with the same version of ``pip`` as the ``csvkit`` formula. For example:
-
-.. code-block:: bash
-
-   $(brew --prefix csvkit)/libexec/bin/pip install psycopg2
-
-Otherwise, make sure that you can open a ``python`` interpreter and run :code:`import psycopg2`. If you see an error containing ``mach-o, but wrong architecture``, you may need to reinstall ``psycopg2`` with :code:`export ARCHFLAGS="-arch i386" pip install --upgrade psycopg2` (`source <https://www.destructuring.net/2013/07/31/trouble-installing-psycopg2-on-osx/>`_).
+csvsql and sql2csv connect through Node.js's built-in ``node:sqlite`` module, so only SQLite connection strings
+(``sqlite:///path/to/file.db``) work; the PostgreSQL and MySQL drivers the message names are not available to them.
+Export the data from the other database to CSV, or into an SQLite file, first.
 
 If you see another error, you may be able to find a solution on StackOverflow.
 
-Python standard output encoding errors
---------------------------------------
+Standard output encoding
+------------------------
 
-If, when running a command like :code:`csvlook dummy.csv | less` you get an error like:
-
-.. code-block:: none
-
-   'ascii' codec can't encode character '\u0105' in position 2: ordinal not in range(128)
-
-The simplest option is to set the encoding that Python uses for standard streams, using the :code:`PYTHONIOENCODING` environment variable:
+The tools write UTF-8 to standard output whatever the locale. If a pager such as :code:`less` shows non-ASCII
+characters as escapes, run it with a UTF-8 locale:
 
 .. code-block:: bash
 
-   env PYTHONIOENCODING=utf8 csvlook dummy.csv | less
+   csvlook dummy.csv | LC_ALL=C.UTF-8 less
+
+The :code:`PYTHONIOENCODING` environment variable, when set, is the default of the :code:`--encoding` option, as it is
+in Python's csvkit.

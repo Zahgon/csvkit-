@@ -55,17 +55,17 @@ For making maps, :doc:`/scripts/csvjson` can also output GeoJSON, see its :doc:`
 csvpy: going into code
 ======================
 
-For the programmers out there, the command line is rarely as functional as just writing a little bit of code. :doc:`/scripts/csvpy` exists just to make a programmer's life easier. Invoking it simply launches a Python interactive terminal, with the data preloaded into a CSV reader:
+For the programmers out there, the command line is rarely as functional as just writing a little bit of code. :doc:`/scripts/csvpy` exists just to make a programmer's life easier. Invoking it simply launches a Node.js interactive terminal, with the data preloaded into a CSV reader:
 
 .. code-block:: console
 
    $ csvpy data.csv
    Welcome! "data.csv" has been loaded in a reader object named "reader".
-   >>> print(len(list(reader)))
+   >>> reader.length
    1037
-   >>> quit()
+   >>> .exit
 
-In addition to being a time-saver, because this uses agate, the reader is Unicode aware.
+In addition to being a time-saver, the reader is Unicode aware.
 
 csvformat: for legacy systems
 =============================

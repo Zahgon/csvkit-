@@ -14,27 +14,15 @@ This tutorial assumes you have some basic familiarity with the command line. If 
 Installing csvkit
 =================
 
-.. note::
-
-   It's best to install csvkit in a `virtual environment <https://docs.python.org/3/library/venv.html>`_.
+csvkit needs Node.js 22 or later. From a clone of the csvkit repository, install its tools with:
 
 .. code-block:: bash
 
-   pip install csvkit
+   npm install --global .
 
 Not working? Check :ref:`troubleshooting`.
 
-If you need to work with `Zstandard <https://facebook.github.io/zstd/>`_ files with the ``.zst`` extension, install Zstandard support:
-
-.. code-block:: bash
-
-   pip install csvkit[zstandard]
-
-Do you use Homebrew? You can `install csvkit system-wide <https://formulae.brew.sh/formula/csvkit>`_ with:
-
-.. code-block:: bash
-
-   brew install csvkit
+The tools read ``.gz``, ``.bz2`` and ``.xz`` compressed files directly.
 
 Getting the data
 ================

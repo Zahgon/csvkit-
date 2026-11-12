@@ -1,9 +1,7 @@
 .DS_Store
-*.pyc
 *.swo
 *.swp
-/build
-/dist
-/csvkit.egg-info
+*.tgz
+/node_modules
 /docs/_build
 /man/.doctrees
