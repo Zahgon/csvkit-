@@ -5,7 +5,7 @@
 
 const fs = require('node:fs');
 const { Utility, readBytes } = require('../lib/cli');
-const { pyError } = require('../lib/pyerrors');
+const { pyError, osError } = require('../lib/pyerrors');
 const { LineWriter, agateReader, Table, TypeTester } = require('../lib/table');
 const { loads } = require('../lib/jsonparse');
 const { pyRepr } = require('../lib/pystr');
@@ -51,13 +51,6 @@ function parseObject(obj, path = '') {
   return d;
 }
 
-const OPEN_ERRORS = {
-  ENOENT: ['FileNotFoundError', 2, 'No such file or directory'],
-  EACCES: ['PermissionError', 13, 'Permission denied'],
-  EISDIR: ['IsADirectoryError', 21, 'Is a directory'],
-  ENOTDIR: ['NotADirectoryError', 20, 'Not a directory'],
-};
-
 /**
  * open(filename, 'w') and write.
  * @param {string} filename
@@ -69,9 +62,7 @@ function writeTextFile(filename, data) {
   try {
     fs.writeFileSync(filename, data);
   } catch (e) {
-    const known = OPEN_ERRORS[e.code];
-    if (!known) throw e;
-    throw pyError(known[0], `[Errno ${known[1]}] ${known[2]}: ${pyRepr(filename)}`);
+    throw osError(e, filename);
   }
 }
 

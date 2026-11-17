@@ -5,7 +5,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { Utility, stdinIsTTY } = require('../lib/cli');
-const { pyError } = require('../lib/pyerrors');
+const codecs = require('../lib/codecs');
+const { pyError, osError } = require('../lib/pyerrors');
 const { LineWriter } = require('../lib/table');
 const { addSniffAndInference } = require('../lib/common');
 const { connect, parseEngineOptions, csvValue } = require('../lib/sql/engine');
@@ -155,7 +156,7 @@ class CSVSQL extends Utility {
     if (a.queries) {
       let queries = [];
       for (let q of a.queries) {
-        if (fs.existsSync(q)) q = fs.readFileSync(q, 'utf8');
+        if (fs.existsSync(q)) q = readTextFile(q);
         queries = queries.concat(pySplit(q, a.sql_delimiter));
       }
       let result = null;
@@ -169,6 +170,22 @@ class CSVSQL extends Utility {
     }
     conn.commit();
   }
+}
+
+/**
+ * open(path).read(): the file as UTF-8 text (the locale's encoding in the image), newlines translated.
+ * @param {string} p
+ * @returns {string}
+ * @throws {Error} pyName the OSError open() raises (IsADirectoryError, PermissionError ...), or UnicodeDecodeError
+ */
+function readTextFile(p) {
+  let buf;
+  try {
+    buf = fs.readFileSync(p);
+  } catch (e) {
+    throw osError(e, p);
+  }
+  return new codecs.TextReader(buf, 'utf-8').read();
 }
 
 // Python's str.split(sep).

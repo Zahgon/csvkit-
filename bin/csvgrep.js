@@ -4,15 +4,45 @@
 
 const fs = require('node:fs');
 const { ArgumentError } = require('../lib/argparse');
-const { Utility } = require('../lib/cli');
+const { Utility, readBytes } = require('../lib/cli');
+const codecs = require('../lib/codecs');
+const { osError } = require('../lib/pyerrors');
 const { LineWriter } = require('../lib/table');
 const { FilteringCSVReader } = require('../lib/grep');
-const { pyRepr } = require('../lib/pystr');
 const pyre = require('../lib/pyre');
 const { rstrip } = require('../lib/pyunicode');
 const warnings = require('../lib/warnings');
 
 const CSVGREP_PY = `${warnings.SITE_PACKAGES}/csvkit/utilities/csvgrep.py`;
+
+/**
+ * {line.rstrip() for line in self.args.matchfile}: the lines of the -f file, read as text in universal newlines mode.
+ * A named file is UTF-8 (strict), while sys.stdin's surrogateescape decoding turns undecodable bytes into lone
+ * surrogates; such a line can never equal a cell, so it is left out.
+ * @param {{bytes: Buffer|null, stdin: boolean}} matchfile what the -f type read (standard input is read here, after
+ *   the CSV input, as Python reads sys.stdin only when it iterates it)
+ * @returns {Set<string>}
+ * @throws {Error} pyName UnicodeDecodeError for a named file that is not UTF-8
+ */
+function matchLines(matchfile) {
+  const lines = new Set();
+  if (!matchfile.stdin) {
+    const reader = new codecs.TextReader(matchfile.bytes, 'utf-8');
+    for (let line = reader.readline(); line; line = reader.readline()) lines.add(rstrip(line));
+    return lines;
+  }
+  const raws = readBytes(null).toString('latin1').split(/\r\n|\r|\n/);
+  // the text after the last line end is a line only when it is not empty
+  if (raws[raws.length - 1] === '') raws.pop();
+  for (const raw of raws) {
+    try {
+      lines.add(rstrip(codecs.decode(Buffer.from(raw, 'latin1'), 'utf-8')));
+    } catch (e) {
+      if (e.pyName !== 'UnicodeDecodeError') throw e;
+    }
+  }
+  return lines;
+}
 
 /** csvgrep: keeps the rows whose given columns match a string, a regular expression or a line of a file. */
 class CSVGrep extends Utility {
@@ -32,12 +62,13 @@ class CSVGrep extends Utility {
     p.addArgument(['-r', '--regex'], { dest: 'regex', help: 'A regular expression to match.' });
     p.addArgument(['-f', '--file'], {
       dest: 'matchfile',
-      type: (v, a, parser) => {
+      // argparse.FileType('r'): '-' is sys.stdin, any other path is opened now and read in main()
+      type: (v) => {
+        if (v === '-') return { bytes: null, stdin: true };
         try {
-          return fs.readFileSync(v === '-' ? 0 : v, 'utf8');
+          return { bytes: fs.readFileSync(v), stdin: false };
         } catch (e) {
-          const msg = e.code === 'ENOENT' ? `[Errno 2] No such file or directory: ${pyRepr(v)}` : e.message;
-          throw new ArgumentError(`argument -f/--file: can't open '${v}': ${msg}`);
+          throw new ArgumentError(`argument -f/--file: can't open '${v}': ${osError(e, v).message}`);
         }
       },
       help: 'A path to a file. For each row, if any line in the file (stripped of line separators) is an exact match of the cell value, the row matches.',
@@ -69,7 +100,7 @@ class CSVGrep extends Utility {
           '  pattern = re.compile(self.args.regex)'),
       });
     } else if (a.matchfile !== null) {
-      const lines = new Set(a.matchfile.replace(/\r\n?/g, '\n').split(/(?<=\n)/).filter((l) => l).map(rstrip));
+      const lines = matchLines(a.matchfile);
       pattern = (x) => lines.has(x);
     } else {
       pattern = a.pattern;
