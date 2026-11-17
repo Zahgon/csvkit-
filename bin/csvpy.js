@@ -84,6 +84,8 @@ class CSVPy extends Utility {
   main() {
     if (this.input_file.isStdin) this.argparser.error('csvpy cannot accept input as piped data via STDIN.');
     const f = this.input_file;
+    // The original reads input_file.name first, which opens its LazyFile: a missing or unreadable file fails here.
+    f.load();
     let variable;
     let welcome;
     if (this.args.as_dict) {
