@@ -7,56 +7,7 @@ const { Readable } = require('node:stream');
 const { Utility, readBytes, stdinIsTTY } = require('../lib/cli');
 const { addSniffAndInference } = require('../lib/common');
 const { agateReader } = require('../lib/table');
-const pycsv = require('../lib/pycsv');
-const { pyError } = require('../lib/pyerrors');
-
-/**
- * agate.csv.DictReader (csv.DictReader with restkey and restval None): the first row gives the field names and each
- * later non-empty row becomes a Map of field name to value, extra values under the key null and missing ones null.
- * It reads lazily, as an iterator, like the original.
- */
-class DictReader {
-  /**
-   * @param {Iterable<string>} lines the input lines
-   * @param {object} opts csv.reader keywords
-   * @throws {Error} pyName TypeError for a keyword csv.reader does not take (csvkit passes header=False for -H)
-   */
-  constructor(lines, opts) {
-    if ('header' in opts) throw pyError('TypeError', "'header' is an invalid keyword argument for this function");
-    this.reader = new pycsv.Reader(lines, opts);
-    this.restkey = null;
-    this.restval = null;
-    this.names = undefined;
-  }
-
-  /** @returns {string[]|null} the field names, read from the first row on first use (null for empty input) */
-  get fieldnames() {
-    if (this.names === undefined) this.names = this.reader.readRow();
-    return this.names;
-  }
-
-  /** @returns {number} the number of lines read */
-  get line_num() { return this.reader.line_num; }
-
-  /** @returns {DictReader} this iterator */
-  [Symbol.iterator]() { return this; }
-
-  /**
-   * DictReader.__next__: the next non-empty row as a Map.
-   * @returns {{done: boolean, value: (Map|undefined)}}
-   * @throws {Error} pyName _csv.Error for malformed CSV
-   */
-  next() {
-    const names = this.fieldnames;
-    let row = this.reader.readRow();
-    while (row !== null && row.length === 0) row = this.reader.readRow();
-    if (row === null) return { done: true, value: undefined };
-    const d = new Map();
-    names.forEach((n, i) => d.set(n, i < row.length ? row[i] : this.restval));
-    if (row.length > names.length) d.set(this.restkey, row.slice(names.length));
-    return { done: false, value: d };
-  }
-}
+const { DictReader } = require('../lib/dict-csv');
 
 /** csvpy: loads a CSV file into a reader, an agate Table or a DictReader and opens an interactive console on it. */
 class CSVPy extends Utility {

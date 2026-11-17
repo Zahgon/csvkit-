@@ -1,52 +1,10 @@
 #!/usr/bin/env node
 'use strict';
 // Port of csvkit.utilities.csvstat (csvkit 2.2.0, MIT).
-const { pyError } = require('../lib/pyerrors');
 const { Utility, parseColumnIdentifiers } = require('../lib/cli');
 const { addSniffAndInference } = require('../lib/common');
 const { agateReader } = require('../lib/table');
-const T = require('../lib/types');
-const { formatString } = require('../lib/pyformat');
-const { dump, pyIntValue } = require('../lib/pyjson');
-const { aggregate, countDistinct, mostCommon } = require('../lib/aggregations');
-const pycsv = require('../lib/pycsv');
-
-const OPERATIONS = [
-  ['type', 'Type of data: '], ['nulls', 'Contains null values: '], ['nonnulls', 'Non-null values: '],
-  ['unique', 'Unique values: '], ['min', 'Smallest value: '], ['max', 'Largest value: '], ['sum', 'Sum: '],
-  ['mean', 'Mean: '], ['median', 'Median: '], ['stdev', 'StDev: '], ['len', 'Longest value: '],
-  ['maxprecision', 'Most decimal places: '], ['freq', 'Most common values: '],
-];
-const LABEL_WIDTH = Math.max(...OPERATIONS.map(([, label]) => label.length));
-const INT_STATS = new Set(['nonnulls', 'unique', 'maxprecision']);
-
-// str(value).
-function pyStr(v) {
-  if (v === null) return 'None';
-  if (v instanceof T.PyDateTime) return v.pyStr(' ');
-  return pycsv.pyStr(v);
-}
-
-/**
- * @param {*} v a statistic
- * @returns {boolean} whether it is a finite Decimal
- */
-function isFiniteDecimal(v) {
-  return v !== null && v.isDecimal === true && !v.special;
-}
-
-// format_decimal: locale.format_string(f, d, grouping=not no_grouping_separator).rstrip('0').rstrip('.')
-function formatDecimal(d, f) {
-  return formatString(f, d).replace(/0+$/, '').replace(/\.+$/, '');
-}
-
-// csvkit.cli.default_float_decimal, the json.dump default of --json.
-function defaultFloatDecimal(v) {
-  if (v instanceof T.PyTimeDelta) return v.totalSeconds();
-  if (v.isDecimal) return v.toNumber();
-  if (v instanceof T.PyDate || v instanceof T.PyDateTime) return v.pyStr();
-  throw pyError('TypeError', `${pyStr(v)} is not JSON serializable`);
-}
+const { OPERATIONS, calculateStats, printOne, printStats, printCsv, printJson } = require('../lib/csvstat-report');
 
 /** csvstat: descriptive statistics for each column, as text, CSV or JSON, or one statistic with an operation flag. */
 class CSVStat extends Utility {
@@ -119,151 +77,15 @@ class CSVStat extends Utility {
       kwargs: this.reader_kwargs,
     });
     const columnIds = parseColumnIdentifiers(a.columns, table.columnNames, this.columnOffset());
-    const freqCount = a.freq_count ? a.freq_count : 5;
+    const opts = { freqCount: a.freq_count ? a.freq_count : 5, decimalFormat: a.decimal_format, jsonOutput: a.json_output, indent: a.indent };
     if (operations.length) {
-      for (const columnId of columnIds) this.printOne(table, columnId, operations[0], columnIds.length !== 1, freqCount);
+      for (const columnId of columnIds) printOne(this.out, table, columnId, operations[0], columnIds.length !== 1, opts);
       return;
     }
-    const stats = new Map(columnIds.map((id) => [id, this.calculateStats(table, id, freqCount)]));
-    if (a.csv_output) this.printCsv(table, columnIds, stats);
-    else if (a.json_output) this.printJson(table, columnIds, stats);
-    else this.printStats(table, columnIds, stats);
-  }
-
-  /**
-   * CSVStat._calculate_stat: one statistic of a column, formatted with --decimal-format for text and CSV output.
-   * csvstat wraps it in `except Exception: return None`, so any Python exception (an error with a pyName) gives
-   * null; other errors are faults in the port and propagate.
-   * @param {object} table the agate Table
-   * @param {number} columnId
-   * @param {string} op the operation name, e.g. "mean"
-   * @param {number} freqCount how many frequent values
-   * @returns {*} the statistic, or null
-   */
-  calculateStat(table, columnId, op, freqCount) {
-    const type = table.columnTypes[columnId];
-    const values = table.rows.map((r) => r[columnId]);
-    try {
-      if (op === 'type') return type.name;
-      if (op === 'unique') return pyIntValue(countDistinct(values));
-      if (op === 'freq') return mostCommon(values, freqCount).map(([value, count]) => ({ value, count }));
-      const v = aggregate(op, type, values);
-      if (INT_STATS.has(op)) return pyIntValue(v);
-      if (isFiniteDecimal(v) && !this.args.json_output) return formatDecimal(v, this.args.decimal_format);
-      return v;
-    } catch (e) {
-      if (e.pyName) return null;
-      throw e;
-    }
-  }
-
-  /**
-   * Every statistic of a column.
-   * @param {object} table the agate Table
-   * @param {number} columnId
-   * @param {number} freqCount
-   * @returns {Map<string, *>} statistic by operation name
-   */
-  calculateStats(table, columnId, freqCount) {
-    return new Map(OPERATIONS.map(([op]) => [op, this.calculateStat(table, columnId, op, freqCount)]));
-  }
-
-  /**
-   * CSVStat.print_one: one statistic of a column, labelled with the column when several are printed.
-   * @param {object} table the agate Table
-   * @param {number} columnId
-   * @param {string} op
-   * @param {boolean} label whether to prefix the column number and name
-   * @param {number} freqCount
-   * @returns {void}
-   */
-  printOne(table, columnId, op, label, freqCount) {
-    let stat = this.calculateStat(table, columnId, op, freqCount);
-    if (op === 'freq') stat = `{ ${stat.map((row) => `"${pyStr(row.value)}": ${row.count}`).join(', ')} }`;
-    else stat = pyStr(stat);
-    if (label) this.out.write(`${String(columnId + 1).padStart(3)}. ${table.columnNames[columnId]}: ${stat}\n`);
-    else this.out.write(`${stat}\n`);
-  }
-
-  /**
-   * CSVStat.print_stats: the text report and the row count.
-   * @param {object} table the agate Table
-   * @param {number[]} columnIds
-   * @param {Map<number, Map<string, *>>} stats
-   * @returns {void}
-   */
-  printStats(table, columnIds, stats) {
-    for (const columnId of columnIds) {
-      const columnStats = stats.get(columnId);
-      const isNumber = table.columnTypes[columnId] instanceof T.NumberType;
-      this.out.write(`${String(columnId + 1).padStart(3)}. "${table.columnNames[columnId]}"\n\n`);
-      for (const [op, label] of OPERATIONS) {
-        const v = columnStats.get(op);
-        if (v === null) continue;
-        if (op === 'freq') {
-          v.forEach((row, i) => {
-            this.out.write(`\t${(i === 0 ? label : '').padEnd(LABEL_WIDTH)} `);
-            const value = isNumber && isFiniteDecimal(row.value) ? formatDecimal(row.value, this.args.decimal_format) : row.value;
-            this.out.write(`${pyStr(value)} (${row.count}x)\n`);
-          });
-          continue;
-        }
-        let text = pyStr(v);
-        if (op === 'nulls' && v) text = `${text} (excluded from calculations)`;
-        else if (op === 'len') text = `${text} characters`;
-        this.out.write(`\t${label.padEnd(LABEL_WIDTH)} ${text}\n`);
-      }
-      this.out.write('\n');
-    }
-    this.out.write(`Row count: ${table.rows.length}\n`);
-  }
-
-  /**
-   * CSVStat.print_csv: one CSV row per column.
-   * @param {object} table the agate Table
-   * @param {number[]} columnIds
-   * @param {Map<number, Map<string, *>>} stats
-   * @returns {void}
-   */
-  printCsv(table, columnIds, stats) {
-    const header = ['column_id', 'column_name', ...OPERATIONS.map(([op]) => op)];
-    const writer = new pycsv.Writer(this.out, { lineterminator: '\n' });
-    writer.writerow(header);
-    for (const row of this.rows(table, columnIds, stats)) {
-      if (row.has('freq')) row.set('freq', row.get('freq').map((r) => pyStr(r.value)).join(', '));
-      writer.writerow(header.map((field) => (row.has(field) ? pyStr(row.get(field)).replace(/\r/g, '\n') : '')));
-    }
-  }
-
-  /**
-   * CSVStat.print_json: one JSON object per column, with -i's indent.
-   * @param {object} table the agate Table
-   * @param {number[]} columnIds
-   * @param {Map<number, Map<string, *>>} stats
-   * @returns {void}
-   * @throws {Error} pyName TypeError for a value JSON cannot serialize
-   */
-  printJson(table, columnIds, stats) {
-    const data = [...this.rows(table, columnIds, stats)].map((row) => {
-      if (row.has('freq')) row.set('freq', row.get('freq').map((r) => new Map([['value', r.value], ['count', pyIntValue(r.count)]])));
-      return row;
-    });
-    dump(data, this.out, { indent: this.args.indent, ensureAscii: false, default: defaultFloatDecimal });
-  }
-
-  /**
-   * The per-column rows --csv and --json print: the column id and name, then each statistic that is not null.
-   * @param {object} table the agate Table
-   * @param {number[]} columnIds
-   * @param {Map<number, Map<string, *>>} stats
-   * @returns {Generator<Map<string, *>>}
-   */
-  * rows(table, columnIds, stats) {
-    for (const columnId of columnIds) {
-      const row = new Map([['column_id', pyIntValue(columnId + 1)], ['column_name', table.columnNames[columnId]]]);
-      for (const [op] of OPERATIONS) if (stats.get(columnId).get(op) !== null) row.set(op, stats.get(columnId).get(op));
-      yield row;
-    }
+    const stats = new Map(columnIds.map((id) => [id, calculateStats(table, id, opts)]));
+    if (a.csv_output) printCsv(this.out, table, columnIds, stats);
+    else if (a.json_output) printJson(this.out, table, columnIds, stats, opts);
+    else printStats(this.out, table, columnIds, stats, opts);
   }
 }
 

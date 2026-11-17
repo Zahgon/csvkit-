@@ -3,10 +3,9 @@
 // Port of csvkit.utilities.csvstack (csvkit 2.2.0, MIT).
 
 const path = require('node:path');
-const { pyError } = require('../lib/pyerrors');
-const { pyRepr } = require('../lib/pystr');
 const { Utility, stdinIsTTY, makeDefaultHeaders } = require('../lib/cli');
 const { LineWriter } = require('../lib/table');
+const { DictReader, DictWriter } = require('../lib/dict-csv');
 const pycsv = require('../lib/pycsv');
 
 /** csvstack: stacks the rows of several CSV files, optionally with a grouping column. */
@@ -61,13 +60,12 @@ class CSVStack extends Utility {
     for (const p of paths) {
       const f = getFile(p);
       if (p !== '-' || !f.skipped) { skip(f); f.skipped = true; }
-      const r = new pycsv.Reader(f.lines(), kw);
       if (useFieldnames) {
-        const fn = r.readRow();
-        const fieldnames = fn || [];
-        for (const fld of fieldnames) if (!headers.includes(fld)) headers.push(fld);
-        readers.push({ f, r, fieldnames, p });
+        const rows = new DictReader(f.lines(), kw);
+        for (const fld of rows.fieldnames || []) if (!headers.includes(fld)) headers.push(fld);
+        readers.push({ f, rows, p });
       } else {
+        const r = new pycsv.Reader(f.lines(), kw);
         const row = r.readRow() || [];
         headers = makeDefaultHeaders(row.length);
         readers.push({ f, r, first: row, p });
@@ -75,43 +73,23 @@ class CSVStack extends Utility {
       }
     }
     if (hasGroups) headers.unshift(groupName);
-    const out = new LineWriter(this.out, this.writer_kwargs);
+    // the grouping value of the i-th input: its -g value or, with --filenames, its file name
+    const groupOf = (p, i) => (groups ? groups[i] : path.basename(p === '-' ? '<stdin>' : p));
     if (useFieldnames) {
-      const wk = this.writer_kwargs;
-      const hdr = wk.lineNumbers ? ['line_number', ...headers] : headers;
-      // DictWriter
-      const w = new pycsv.Writer(this.out, { lineterminator: '\n' });
-      w.writerow(hdr);
-      let count = 1;
-      const seenStdin = new Set();
+      const output = new DictWriter(this.out, headers, this.writer_kwargs);
+      output.writeheader();
       paths.forEach((p, i) => {
-        const group = hasGroups ? (groups ? groups[i] : path.basename(p === '-' ? '<stdin>' : p)) : null;
-        let entry = readers[i];
-        if (p === '-' && seenStdin.has('-')) entry = { ...entry, fieldnames: entry.fieldnames };
-        seenStdin.add(p);
-        const { r, fieldnames } = entry;
-        for (;;) {
-          const row = r.readRow();
-          if (row === null) break;
-          if (fieldnames.length === 0 && row.length === 0) continue;
-          if (row.length === 0) continue;
-          const d = new Map();
-          fieldnames.forEach((k, j) => d.set(k, j < row.length ? row[j] : null));
-          if (row.length > fieldnames.length) d.set(null, row.slice(fieldnames.length));
-          if (hasGroups) d.set(groupName, group);
-          for (const [k, v] of d) if (typeof v === 'string') d.set(k, v.replace(/\r/g, '\n'));
-          if (wk.lineNumbers) { d.set('line_number', count); count++; }
-          const extra = [...d.keys()].filter((k) => !hdr.includes(k));
-          if (extra.length) {
-            throw pyError('ValueError', `dict contains fields not in fieldnames: ${extra.map((k) => (k === null ? 'None' : pyRepr(k))).join(', ')}`);
-          }
-          w.writerow(hdr.map((h) => (d.has(h) ? d.get(h) : '')));
+        const group = hasGroups ? groupOf(p, i) : null;
+        for (const row of readers[i].rows) {
+          if (hasGroups) row.set(groupName, group);
+          output.writerow(row);
         }
       });
     } else {
+      const out = new LineWriter(this.out, this.writer_kwargs);
       out.writerow(headers);
       paths.forEach((p, i) => {
-        const group = hasGroups ? (groups ? groups[i] : path.basename(p === '-' ? '<stdin>' : p)) : null;
+        const group = hasGroups ? groupOf(p, i) : null;
         let r;
         if (p === '-' && readers[0].p === '-' && !readers[0].used) {
           readers[0].used = true;

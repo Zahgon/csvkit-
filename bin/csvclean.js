@@ -4,21 +4,9 @@
 
 const { ExitError } = require('../lib/argparse');
 const { Utility } = require('../lib/cli');
-const { joinRows } = require('../lib/cleanup');
+const { RowChecker } = require('../lib/row-checker');
 const { LineWriter, agateCsvError } = require('../lib/table');
-const { pyRepr } = require('../lib/pystr');
 const pycsv = require('../lib/pycsv');
-const { pyError } = require('../lib/pyerrors');
-
-// list.remove() on csvkit's Error dataclass: the first error equal by line number, row and message.
-function removeError(errors, error) {
-  const same = (e) => e.line === error.line && e.msg === error.msg && e.row.length === error.row.length
-    && e.row.every((v, i) => v === error.row[i]);
-  const index = errors.findIndex(same);
-  if (index < 0) throw pyError('ValueError', 'list.remove(x): x not in list');
-  errors.splice(index, 1);
-}
-const { split } = require('../lib/pyunicode');
 
 /** csvclean: reports (and with its options fixes) rows whose length differs from the header, and empty columns. */
 class CSVClean extends Utility {
@@ -58,8 +46,6 @@ class CSVClean extends Utility {
     }
     if (a.join_short_rows && a.fill_short_rows) this.argparser.error('The --join-short-rows and --fill-short-rows options are mutually exclusive.');
     const dflt = a.enable_all_checks;
-    const lengthMismatch = dflt || a.length_mismatch;
-    const emptyColumns = dflt || a.empty_columns;
     const kw = { ...this.reader_kwargs };
     delete kw.header;
     const csvReader = new pycsv.Reader(this.skipLines().lines(), kw);
@@ -74,55 +60,22 @@ class CSVClean extends Utility {
       },
       get line_num() { return csvReader.line_num; },
     };
-    let names = reader.readRow();
-    if (names === null) names = [];
-    else if (a.header_normalize_space) names = names.map((n) => split(n).join(' '));
-    const errors = [];
+    const checker = new RowChecker(reader, {
+      lengthMismatch: dflt || a.length_mismatch,
+      emptyColumns: dflt || a.empty_columns,
+      omitErrorRows: a.omit_error_rows,
+      headerNormalizeSpace: a.header_normalize_space,
+      joinShortRows: a.join_short_rows,
+      separator: a.separator,
+      fillShortRows: a.fill_short_rows,
+      fillvalue: a.fillvalue,
+      zeroBased: a.zero_based,
+    });
+    const names = checker.columnNames;
     const out = new LineWriter(this.out, this.writer_kwargs);
     out.writerow(names);
-    const n = names.length;
-    let joinable = [];
-    let rowCount = 0;
-    const emptyCounts = names.map(() => 0);
-    for (;;) {
-      let row = reader.readRow();
-      if (row === null) break;
-      const lineNumber = reader.line_num - 1;
-      rowCount++;
-      const lengthError = { line: lineNumber, row, msg: `Expected ${n} columns, found ${row.length} columns` };
-      if (a.fill_short_rows) {
-        if (row.length < n) row = row.concat(Array(n - row.length).fill(a.fillvalue));
-      } else if (a.join_short_rows) {
-        if (row.length >= n) joinable = [];
-        else {
-          joinable.push(lengthError);
-          if (joinable.length > 1) {
-            while (joinable.length) {
-              const fixed = joinRows(joinable.map((e) => e.row), a.separator);
-              if (fixed.length < n) break;
-              if (fixed.length === n) {
-                row = fixed;
-                if (lengthMismatch) for (const f of joinable) removeError(errors, f);
-                joinable = [];
-                break;
-              }
-              joinable = joinable.slice(1);
-            }
-          }
-        }
-      }
-      if (lengthMismatch && row.length !== n) errors.push(lengthError);
-      if (emptyColumns) for (let i = 0; i < n; i++) if (i >= row.length || row[i] === '') emptyCounts[i]++;
-      if (!a.omit_error_rows || row.length === n) out.writerow(row);
-    }
-    if (rowCount) {
-      const empty = [];
-      emptyCounts.forEach((c, i) => { if (c === rowCount) empty.push(i); });
-      if (empty.length) {
-        const off = a.zero_based ? 0 : 1;
-        errors.push({ line: 1, row: names.map(() => ''), msg: `Empty columns named ${empty.map((i) => pyRepr(names[i])).join(', ')}! Try: csvcut -C ${empty.map((i) => i + off).join(',')}` });
-      }
-    }
+    for (const row of checker.checkedRows()) out.writerow(row);
+    const errors = checker.errors;
     if (errors.length) {
       let label = a.label;
       if (label === '-') label = this.input_file.isStdin ? 'stdin' : this.input_file.name;

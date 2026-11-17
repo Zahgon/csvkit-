@@ -5,8 +5,9 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { Utility, stdinIsTTY } = require('../lib/cli');
-const codecs = require('../lib/codecs');
-const { pyError, osError } = require('../lib/pyerrors');
+const { pyError } = require('../lib/pyerrors');
+const { splitext } = require('../lib/pypath');
+const { readTextFile } = require('../lib/textfile');
 const { LineWriter } = require('../lib/table');
 const { addSniffAndInference } = require('../lib/common');
 const { connect, parseEngineOptions, csvValue } = require('../lib/sql/engine');
@@ -121,7 +122,7 @@ class CSVSQL extends Utility {
       for (const q of pySplit(queries, a.sql_delimiter)) conn.execDriverSql(q);
     };
     for (const f of files) {
-      const name = tableNames.length ? tableNames.shift() : f.isStdin ? 'stdin' : splitext(path.basename(f.name));
+      const name = tableNames.length ? tableNames.shift() : f.isStdin ? 'stdin' : splitext(path.basename(f.name))[0];
       const table = this.tableFromCsv(f, {
         skipLines: a.skip_lines,
         sniffLimit: a.sniff_limit !== -1 ? a.sniff_limit : null,
@@ -172,33 +173,10 @@ class CSVSQL extends Utility {
   }
 }
 
-/**
- * open(path).read(): the file as UTF-8 text (the locale's encoding in the image), newlines translated.
- * @param {string} p
- * @returns {string}
- * @throws {Error} pyName the OSError open() raises (IsADirectoryError, PermissionError ...), or UnicodeDecodeError
- */
-function readTextFile(p) {
-  let buf;
-  try {
-    buf = fs.readFileSync(p);
-  } catch (e) {
-    throw osError(e, p);
-  }
-  return new codecs.TextReader(buf, 'utf-8').read();
-}
-
 // Python's str.split(sep).
 function pySplit(text, sep) {
   if (sep === '') throw pyError('ValueError', 'empty separator');
   return text.split(sep);
-}
-
-// os.path.splitext(name)[0]: drops the last extension unless the name only starts with a dot.
-function splitext(name) {
-  const dot = name.lastIndexOf('.');
-  if (dot <= 0 || /^\.+$/.test(name.slice(0, dot))) return name;
-  return name.slice(0, dot);
 }
 
 new CSVSQL().launch();
